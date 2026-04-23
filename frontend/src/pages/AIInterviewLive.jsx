@@ -8,11 +8,12 @@ import "./AIInterview.css";
 const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 
-const QUESTION_TIME = 60; // 1 minute per question
+const QUESTION_TIME = 60;
 
 function AIInterviewLive() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { setInterviewData } = useContext(AppContext);
 
   const questions = useMemo(() => location.state?.questions || [], [location.state]);
   const skills = useMemo(() => location.state?.skills || [], [location.state]);
@@ -26,13 +27,13 @@ function AIInterviewLive() {
   const [status, setStatus] = useState("Preparing interview...");
   const [violations, setViolations] = useState([]);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
+  const [warningCount, setWarningCount] = useState(0);
+  const [activeWarning, setActiveWarning] = useState("");
 
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
 
-  // =========================
-  // Redirect if no questions
-  // =========================
+  // ── Redirect if no questions ─────────────────────────────────────────────
   useEffect(() => {
     if (!questions.length) {
       alert("No interview session found. Please start again.");
@@ -40,9 +41,7 @@ function AIInterviewLive() {
     }
   }, [questions, navigate]);
 
-  // =========================
-  // Strict Interview Mode
-  // =========================
+  // ── Strict mode: fullscreen + tab detection ──────────────────────────────
   useEffect(() => {
     const enterFullscreen = async () => {
       try {
@@ -55,19 +54,13 @@ function AIInterviewLive() {
     };
 
     const handleVisibility = () => {
-      if (document.hidden) {
-        terminateInterview("Tab switching detected");
-      }
+      if (document.hidden) terminateInterview("Tab switching detected");
     };
-
     const handleFullscreen = () => {
-      if (!document.fullscreenElement) {
-        terminateInterview("Fullscreen exited");
-      }
+      if (!document.fullscreenElement) terminateInterview("Fullscreen exited");
     };
 
     enterFullscreen();
-
     document.addEventListener("visibilitychange", handleVisibility);
     document.addEventListener("fullscreenchange", handleFullscreen);
 
@@ -80,27 +73,20 @@ function AIInterviewLive() {
     };
   }, []);
 
-  // =========================
-  // Start each question
-  // =========================
+  // ── Per-question setup ───────────────────────────────────────────────────
   useEffect(() => {
     if (!questions.length) return;
-
     setCurrentAnswer("");
     setTimeLeft(QUESTION_TIME);
     setStatus(`Question ${currentIndex + 1} of ${questions.length}`);
-
-    // Speak the current question
     speakQuestion(questions[currentIndex]);
 
-    // Start 1-minute timer
     if (timerRef.current) clearInterval(timerRef.current);
-
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          autoNext(); // ✅ Auto move
+          autoNext();
           return 0;
         }
         return prev - 1;
@@ -112,49 +98,31 @@ function AIInterviewLive() {
     };
   }, [currentIndex, questions]);
 
-  // =========================
-  // AI Voice Question
-  // =========================
+  // ── TTS ──────────────────────────────────────────────────────────────────
   const speakQuestion = (text) => {
     speechSynthesis.cancel();
-
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "en-US";
     utter.rate = 1;
     utter.pitch = 1;
-
-    utter.onstart = () => {
-      setStatus("AI is asking the question...");
-    };
-
-    utter.onend = () => {
-      startListening(); // start mic after AI finishes speaking
-    };
-
+    utter.onstart = () => setStatus("AI is asking the question...");
+    utter.onend = () => startListening();
     speechSynthesis.speak(utter);
   };
 
-  // =========================
-  // Start Speech Recognition
-  // =========================
+  // ── Speech recognition ───────────────────────────────────────────────────
   const startListening = () => {
     if (!SpeechRecognition) {
       alert("Speech Recognition not supported. Please use Google Chrome.");
       return;
     }
-
     stopListening();
 
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = true;
     recognition.continuous = true;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setStatus("Listening to your answer...");
-    };
-
+    recognition.onstart = () => { setIsListening(true); setStatus("Listening to your answer..."); };
     recognition.onresult = (event) => {
       let transcript = "";
       for (let i = 0; i < event.results.length; i++) {
@@ -162,49 +130,29 @@ function AIInterviewLive() {
       }
       setCurrentAnswer(transcript.trim());
     };
-
     recognition.onerror = (event) => {
       console.error("Speech recognition error:", event.error);
       setStatus("Mic issue. Please allow microphone.");
       setIsListening(false);
     };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
+    recognition.onend = () => setIsListening(false);
 
     recognitionRef.current = recognition;
     recognition.start();
   };
 
-  // =========================
-  // Stop Speech Recognition
-  // =========================
   const stopListening = () => {
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    } catch (err) {
-      console.warn("Stop listening issue:", err);
-    }
+    try { if (recognitionRef.current) recognitionRef.current.stop(); } catch {}
     setIsListening(false);
   };
 
-  // =========================
-  // Auto Next Question
-  // =========================
+  // ── Navigation ───────────────────────────────────────────────────────────
   const autoNext = () => {
     stopListening();
-
     const updatedAnswers = [
       ...answers,
-      {
-        question: questions[currentIndex],
-        answer: currentAnswer || "No answer provided",
-      },
+      { question: questions[currentIndex], answer: currentAnswer || "No answer provided" },
     ];
-
     setAnswers(updatedAnswers);
 
     if (currentIndex < questions.length - 1) {
@@ -214,92 +162,85 @@ function AIInterviewLive() {
     }
   };
 
-  const { setInterviewData } = useContext(AppContext);
-
-  // =========================
-  // Submit Interview
-  // =========================
+  // ── Submit ───────────────────────────────────────────────────────────────
   const submitInterview = async (finalAnswers) => {
     try {
       setIsSubmitting(true);
       setStatus("Submitting interview...");
 
-      const payload = {
-        resume_name: resumeName,
-        skills,
-        answers: finalAnswers,
-        violations,
+      const payload = { resume_name: resumeName, skills, answers: finalAnswers, violations };
+      const response = await interviewAPI.submit(payload);
+
+      // After axios interceptor, response.data is the inner `data` object:
+      // { score, confidence, communication, weaknesses, full_results }
+      const result = response?.data;
+
+      if (!result) throw new Error("Empty response from server");
+
+      // Safe normalisation before storing in global state
+      const normalised = {
+        score: result.score ?? 0,
+        confidence: result.confidence ?? 0,
+        communication: result.communication ?? 0,
+        // Guarantee weaknesses is always an array — critical for roadmap
+        weaknesses: Array.isArray(result.weaknesses) ? result.weaknesses : [],
+        full_results: result.full_results ?? {},
       };
 
-      const response = await interviewAPI.submit(payload);
-      
-      // Save to global state so other pages can use it
-      setInterviewData(response.data);
+      setInterviewData(normalised);   // AppContext setter also guarantees weaknesses array
+      localStorage.setItem("interview_data", JSON.stringify(normalised));
 
       navigate("/interview-result", {
-        state: {
-          result: response.data,
-          answers: finalAnswers,
-          skills,
-          violations,
-        },
+        state: { result: normalised, answers: finalAnswers, skills, violations },
       });
     } catch (err) {
       console.error("Interview submission error:", err);
-      alert("Failed to submit interview. Check backend /submit-interview.");
+      alert("Failed to submit interview. Check the backend is running on port 8001.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // =========================
-  // Terminate Interview
-  // =========================
+  // ── Terminate ────────────────────────────────────────────────────────────
   const terminateInterview = (reason) => {
     speechSynthesis.cancel();
     stopListening();
     if (timerRef.current) clearInterval(timerRef.current);
-
-    const updatedViolations = [...violations, reason];
-    setViolations(updatedViolations);
-
+    setViolations((prev) => [...prev, reason]);
     alert(`Interview terminated: ${reason}`);
     navigate("/dashboard");
   };
 
-  // =========================
-  // Camera Violation Handler
-  // =========================
-  const [warningCount, setWarningCount] = useState(0);
-  const [activeWarning, setActiveWarning] = useState("");
-
+  // ── Camera violation ─────────────────────────────────────────────────────
   const handleViolation = (reason) => {
-    // Prevent immediate multiple triggers
     setActiveWarning(reason);
-    
     setWarningCount((prev) => {
-      const newCount = prev + 1;
-      if (newCount >= 3) {
-        terminateInterview(`Repeated violations: ${reason}`);
-      }
-      return newCount;
+      const n = prev + 1;
+      if (n >= 3) terminateInterview(`Repeated violations: ${reason}`);
+      return n;
     });
-
-    // Clear active warning from screen after 5 seconds
-    setTimeout(() => {
-      setActiveWarning("");
-    }, 5000);
+    setTimeout(() => setActiveWarning(""), 5000);
   };
 
   return (
     <div className="live-interview-page">
-      {/* LEFT SIDE */}
+      {/* LEFT */}
       <div className="live-left">
         <h1>Live AI Interview</h1>
         <p className="subtitle">{status}</p>
 
         {activeWarning && (
-          <div style={{ backgroundColor: '#ef4444', color: 'white', padding: '10px 15px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold', animation: 'pulse 2s infinite' }}>
+          <div
+            style={{
+              backgroundColor: "#ef4444",
+              color: "white",
+              padding: "10px 15px",
+              borderRadius: "8px",
+              marginBottom: "20px",
+              fontWeight: "bold",
+              animation: "pulse 2s infinite",
+            }}
+          >
             ⚠️ WARNING ({warningCount}/3): {activeWarning}
           </div>
         )}
@@ -325,28 +266,24 @@ function AIInterviewLive() {
           <button onClick={startListening} disabled={isListening || isSubmitting}>
             {isListening ? "Listening..." : "🎤 Speak Again"}
           </button>
-
           <button onClick={stopListening} disabled={!isListening || isSubmitting}>
             ⏹ Stop
           </button>
-
           <button onClick={autoNext} disabled={isSubmitting}>
             {currentIndex === questions.length - 1 ? "Submit Now" : "Next Now"}
           </button>
         </div>
       </div>
 
-      {/* RIGHT SIDE */}
+      {/* RIGHT */}
       <div className="live-right">
         <h3>📷 Live Proctoring</h3>
         <p className="subtitle">
           Stay visible and focused. 3 warnings will end the interview.
         </p>
-
         <div className="camera-box">
           <CameraMonitor onViolation={handleViolation} />
         </div>
-
         <div className="result-box" style={{ marginTop: "20px" }}>
           <h3>Interview Rules</h3>
           <ul style={{ lineHeight: "1.8", paddingLeft: "18px", color: "#cbd5e1" }}>

@@ -60,15 +60,20 @@ function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        
+        {/* HEADER */}
         <div className="auth-header">
           <h1>Welcome Back</h1>
           <p>Login to continue your NeuroPath AI journey.</p>
         </div>
 
+        {/* FORM */}
         <form className="auth-form" onSubmit={handleSubmit}>
+          
           <div className="auth-input-group">
             <label>Email</label>
             <input
+              className="auth-input"
               type="email"
               name="email"
               placeholder="Enter your email"
@@ -80,6 +85,7 @@ function Login() {
           <div className="auth-input-group">
             <label>Password</label>
             <input
+              className="auth-input"
               type="password"
               name="password"
               placeholder="Enter your password"
@@ -90,13 +96,19 @@ function Login() {
 
           {error && <div className="auth-error">{error}</div>}
 
-          <button type="submit" className="auth-button" disabled={loading}>
+          <button
+            type="submit"
+            className="auth-btn"
+            disabled={loading}
+          >
             {loading ? "Logging in..." : "Login"}
           </button>
 
-          <p className="auth-footer-text">
-            Don’t have an account? <Link to="/register">Create one</Link>
+          <p className="auth-link">
+            Don’t have an account?{" "}
+            <Link to="/register">Create one</Link>
           </p>
+
         </form>
       </div>
     </div>

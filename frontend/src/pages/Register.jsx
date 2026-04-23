@@ -62,15 +62,18 @@ function Register() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        
         <div className="auth-header">
           <h1>Create Account</h1>
           <p>Start your AI-powered career journey today.</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
+
           <div className="auth-input-group">
             <label>Full Name</label>
             <input
+              className="auth-input"
               type="text"
               name="name"
               placeholder="Enter your full name"
@@ -82,6 +85,7 @@ function Register() {
           <div className="auth-input-group">
             <label>Email</label>
             <input
+              className="auth-input"
               type="email"
               name="email"
               placeholder="Enter your email"
@@ -93,6 +97,7 @@ function Register() {
           <div className="auth-input-group">
             <label>Password</label>
             <input
+              className="auth-input"
               type="password"
               name="password"
               placeholder="Create a password"
@@ -104,13 +109,18 @@ function Register() {
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="auth-success">{success}</div>}
 
-          <button type="submit" className="auth-button" disabled={loading}>
+          <button
+            type="submit"
+            className="auth-btn"
+            disabled={loading}
+          >
             {loading ? "Creating account..." : "Register"}
           </button>
 
-          <p className="auth-footer-text">
+          <p className="auth-link">
             Already have an account? <Link to="/login">Sign in</Link>
           </p>
+
         </form>
       </div>
     </div>

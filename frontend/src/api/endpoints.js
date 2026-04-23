@@ -4,16 +4,20 @@ const API = axios.create({
   baseURL: "http://127.0.0.1:8001",
 });
 
+// Unwrap { success, data, message } envelope — keeps all callers simple
 API.interceptors.response.use(
   (response) => {
-    // If the response follows our { success, data, message } wrapper structure
-    if (response.data && typeof response.data.success !== "undefined") {
-      // Create a fake response where `response.data` is the inner data, to avoid breaking legacy code
-      // We also attach full response to `response.originalData` just in case
+    if (
+      response.data &&
+      typeof response.data === "object" &&
+      typeof response.data.success !== "undefined"
+    ) {
       return {
         ...response,
-        data: response.data.data,
-        originalData: response.data
+        data: response.data.data ?? null,
+        originalData: response.data,
+        success: response.data.success,
+        message: response.data.message,
       };
     }
     return response;
@@ -23,7 +27,7 @@ API.interceptors.response.use(
 
 // ================= AUTH API =================
 export const authAPI = {
-  login: (data) => API.post("/auth/login", data),
+  login:    (data) => API.post("/auth/login", data),
   register: (data) => API.post("/auth/register", data),
 };
 
@@ -32,7 +36,6 @@ export const resumeAPI = {
   analyze: (file) => {
     const formData = new FormData();
     formData.append("file", file);
-
     return API.post("/analyze-resume", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -41,14 +44,10 @@ export const resumeAPI = {
 
 // ================= INTERVIEW API =================
 export const interviewAPI = {
-  generate: (payload) => API.post("/generate-interview", payload),
-
-  submit: (payload) => API.post("/submit-interview", payload),
-
-  placement: (payload) => API.post("/placement-analysis", payload),
-
-  roadmap: (payload) => API.post("/generate-roadmap", payload),
-
+  generate:     (payload) => API.post("/generate-interview", payload),
+  submit:       (payload) => API.post("/submit-interview", payload),
+  placement:    (payload) => API.post("/placement-analysis", payload),
+  roadmap:      (payload) => API.post("/generate-roadmap", payload),
   analyzeFrame: (payload) =>
     API.post("/proctoring/analyze-events", payload, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -62,7 +61,7 @@ export const dailyAPI = {
 
 // ================= APTITUDE API =================
 export const aptitudeAPI = {
-  getTest: () => API.get("/aptitude-test"),
+  getTest:    () => API.get("/aptitude-test"),
   submitTest: (payload) => API.post("/submit-aptitude", payload),
 };
 
@@ -73,8 +72,14 @@ export const dashboardAPI = {
 
 // ================= PROFILE API =================
 export const profileAPI = {
-  getProfile: () => API.get("/get-profile"),
-  updateProfile: (data) => API.post("/update-profile", data),
+  // GET /profile/{email}  — falls back to legacy /get-profile when no email given
+  getProfile: (email) =>
+    email
+      ? API.get(`/profile/${encodeURIComponent(email)}`)
+      : API.get("/get-profile"),
+
+  // POST /profile/update  — always returns the full saved profile object
+  updateProfile: (data) => API.post("/profile/update", data),
 };
 
 export default API;

@@ -27,14 +27,12 @@ from backend.app.auth.dependencies import get_current_user
 
 from fastapi.middleware.cors import CORSMiddleware
 
-# ✅ ONLY KEEP PROCTOR ROUTER
 from backend.app.proctoring.proctor_routes import router as proctor_router
-
 from backend.app.assistant.assistant_routes import router as assistant_router
 
-app = FastAPI()
+app = FastAPI(title="NeuroPath AI Backend", version="1.1.0")
 
-# ================= CORS =================
+# ── CORS ────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,221 +41,262 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= ROUTERS =================
+# ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
-app.include_router(proctor_router)  # ✅ KEEP THIS
+app.include_router(proctor_router)
 app.include_router(assistant_router, tags=["Assistant"])
 
-# ================= RESUME ANALYSIS =================
+
+# ── Response helpers ─────────────────────────────────────────────────────────
+def ok(data, message="OK"):
+    return {"success": True, "message": message, "data": data}
+
+def err(message):
+    return {"success": False, "message": str(message), "data": None}
+
+
+# ── Profile store helpers ────────────────────────────────────────────────────
+PROFILE_FILE = "user_profiles.json"
+
+def _load_profiles() -> dict:
+    try:
+        if os.path.exists(PROFILE_FILE):
+            with open(PROFILE_FILE, "r") as f:
+                content = f.read().strip()
+                if content:
+                    return json.loads(content)
+    except Exception as e:
+        print(f"[profile] load error: {e}")
+    return {}
+
+def _save_profiles(profiles: dict):
+    try:
+        with open(PROFILE_FILE, "w") as f:
+            json.dump(profiles, f, indent=2)
+    except Exception as e:
+        print(f"[profile] save error: {e}")
+
+def _build_safe_profile(raw: dict, email: str = "") -> dict:
+    """Return a guaranteed-safe profile dict — no missing keys, no None values."""
+    custom = raw.get("custom_skills", [])
+    if not isinstance(custom, list):
+        custom = []
+    return {
+        "name":          str(raw.get("name",          "") or ""),
+        "bio":           str(raw.get("bio",           "") or ""),
+        "profile_image": str(raw.get("profile_image", "") or ""),
+        "cover_image":   str(raw.get("cover_image",   "") or ""),
+        "custom_skills": [str(s) for s in custom if s],
+        "email":         str(raw.get("email", email) or email),
+    }
+
+
+# ── RESUME ANALYSIS ──────────────────────────────────────────────────────────
 @app.post("/analyze-resume")
 async def analyze_resume(file: UploadFile = File(...)):
+    file_location = f"temp_{file.filename}"
     try:
-        file_location = f"temp_{file.filename}"
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         resume_text = extract_text(file_location)
-
-        skills = extract_skills(resume_text)
-        projects = extract_projects(resume_text)
-        experience = extract_experience(resume_text)
-
-        careers = semantic_match(resume_text)
-        top_career = careers[0]["career"] if careers else "Software Engineer"
-
-        missing_skills = find_skill_gap(skills, top_career)
+        skills      = extract_skills(resume_text)
+        projects    = extract_projects(resume_text)
+        experience  = extract_experience(resume_text)
+        careers     = semantic_match(resume_text)
+        top_career  = careers[0]["career"] if careers else "Software Engineer"
+        missing     = find_skill_gap(skills, top_career)
 
         domain_scores = {}
         for item in careers:
-            career_name = item["career"]
-            score = item["score"]
-            domain = CAREER_DATA.get(career_name, {}).get("domain", "General")
-            domain_scores[domain] = domain_scores.get(domain, 0) + score
+            d = CAREER_DATA.get(item["career"], {}).get("domain", "General")
+            domain_scores[d] = domain_scores.get(d, 0) + item["score"]
+        best_domain   = max(domain_scores, key=domain_scores.get) if domain_scores else "General"
+        resume_score  = calculate_resume_score(skills, top_career, missing)
+        explanation   = explain_career(skills, top_career)
 
-        best_domain = max(domain_scores, key=domain_scores.get) if domain_scores else "General"
-
-        resume_score = calculate_resume_score(skills, top_career, missing_skills)
-        career_explanation = explain_career(skills, top_career)
-
-        os.remove(file_location)
-
-        return {
-            "success": True,
-            "message": "Resume analyzed successfully",
-            "data": {
-                "detected_skills": skills,
-                "projects": projects,
-                "experience": experience,
-                "recommended_careers": careers,
-                "top_career": top_career,
-                "missing_skills": missing_skills,
-                "resume_score": resume_score,
-                "career_explanation": career_explanation,
-                "best_domain": best_domain,
-                "domain_scores": domain_scores
-            }
-        }
+        return ok({
+            "detected_skills":      skills,
+            "projects":             projects,
+            "experience":           experience,
+            "recommended_careers":  careers,
+            "top_career":           top_career,
+            "missing_skills":       missing,
+            "resume_score":         resume_score,
+            "career_explanation":   explanation,
+            "best_domain":          best_domain,
+            "domain_scores":        domain_scores,
+        }, "Resume analyzed successfully")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
+    finally:
+        if os.path.exists(file_location):
+            try: os.remove(file_location)
+            except: pass
 
-# ================= GENERATE INTERVIEW =================
+
+# ── GENERATE INTERVIEW ────────────────────────────────────────────────────────
 @app.post("/generate-interview")
 async def generate_interview(data: dict):
     try:
-        skills = data.get("skills", [])
+        skills    = data.get("skills", [])
         questions = generate_questions_from_skills(skills)
-        return {
-            "success": True,
-            "message": "Questions generated successfully",
-            "data": {
-                "skills": skills,
-                "questions": questions
-            }
-        }
+        return ok({"skills": skills, "questions": questions}, "Questions generated")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= SUBMIT INTERVIEW =================
+
+# ── SUBMIT INTERVIEW ──────────────────────────────────────────────────────────
 @app.post("/submit-interview")
 async def submit_interview(data: dict):
     try:
-        skills = data.get("skills", [])
+        skills  = data.get("skills", [])
         answers = data.get("answers", [])
-
         results = evaluate_interview_answers(answers, skills)
-        weak = results.get("weaknesses", [])
-
-        return {
-            "success": True,
-            "message": "Interview evaluated successfully",
-            "data": {
-                "score": results.get("score", 0),
-                "confidence": results.get("confidence_score", 0),
-                "communication": results.get("communication_score", 0),
-                "weaknesses": weak,
-                "full_results": results
-            }
-        }
+        weak    = results.get("weaknesses", [])
+        if not isinstance(weak, list):
+            weak = []
+        return ok({
+            "score":        results.get("score", 0),
+            "confidence":   results.get("confidence_score", 0),
+            "communication":results.get("communication_score", 0),
+            "weaknesses":   weak,
+            "full_results": results,
+        }, "Interview evaluated")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= AI INTERVIEW TEST =================
+
+# ── AI INTERVIEW TEST ─────────────────────────────────────────────────────────
 @app.post("/ai-interview")
 async def ai_interview(data: dict):
     try:
-        skills = data.get("skills", [])
-        answers = data.get("answers", [])
-
-        results = evaluate_interview_answers(answers, skills)
+        results    = evaluate_interview_answers(data.get("answers", []), data.get("skills", []))
         weak_areas = results.get("weaknesses", [])
-
-        return {
-            "success": True,
-            "message": "AI interview evaluated successfully",
-            "data": {
-                "interview_results": results,
-                "weak_areas": weak_areas
-            }
-        }
+        if not isinstance(weak_areas, list):
+            weak_areas = []
+        return ok({"interview_results": results, "weak_areas": weak_areas}, "AI interview evaluated")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= PLACEMENT =================
+
+# ── PLACEMENT ─────────────────────────────────────────────────────────────────
 @app.post("/placement-analysis")
 async def placement_analysis(data: dict):
     try:
-        resume_score = data.get("resume_score", 0)
-        interview_score = data.get("interview_score", 0)
-        missing_skills = data.get("missing_skills", [])
-        confidence = data.get("confidence", 0)
-        communication = data.get("communication", 0)
-        domain = data.get("domain", "Technology")
-
         result = predict_placement_result(
-            {
-                "score": interview_score,
-                "confidence_score": confidence,
-                "communication_score": communication
-            },
-            missing_skills,
-            domain
+            {"score": data.get("interview_score", 0),
+             "confidence_score": data.get("confidence", 0),
+             "communication_score": data.get("communication", 0)},
+            data.get("missing_skills", []),
+            data.get("domain", "Technology"),
         )
-        return {"success": True, "message": "Placement analyzed", "data": result}
+        return ok(result, "Placement analyzed")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= ROADMAP =================
+
+# ── ROADMAP ───────────────────────────────────────────────────────────────────
 @app.post("/generate-roadmap")
 async def generate_roadmap(data: dict):
     try:
-        weaknesses = data.get("weaknesses", [])
-        missing_skills = data.get("missing_skills", [])
-        domain = data.get("domain", "")
-
-        roadmap = generate_learning_roadmap(weaknesses, missing_skills, domain)
-        return {"success": True, "message": "Roadmap generated", "data": roadmap}
+        roadmap = generate_learning_roadmap(
+            data.get("weaknesses", []),
+            data.get("missing_skills", []),
+            data.get("domain", "General"),
+        )
+        if not isinstance(roadmap, list):
+            roadmap = []
+        return ok(roadmap, "Roadmap generated")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= DAILY CHALLENGE =================
+
+# ── DAILY CHALLENGE ───────────────────────────────────────────────────────────
 @app.get("/daily-challenge")
 async def daily_challenge():
     try:
-        challenges = get_daily_challenges()
-        return {"success": True, "message": "Challenges fetched", "data": {"challenges": challenges}}
+        return ok({"challenges": get_daily_challenges()}, "Challenges fetched")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= APTITUDE TEST =================
+
+# ── APTITUDE ──────────────────────────────────────────────────────────────────
 @app.get("/aptitude-test")
 async def aptitude_test():
     try:
-        questions = generate_aptitude_test(20)
-        return {"success": True, "message": "Test fetched", "data": {"questions": questions}}
+        return ok({"questions": generate_aptitude_test(20)}, "Test fetched")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
 @app.post("/submit-aptitude")
 async def submit_aptitude(data: dict):
     try:
-        answers = data.get("answers", [])
-        result = evaluate_aptitude_test(answers)
-        return {"success": True, "message": "Test evaluated", "data": result}
+        return ok(evaluate_aptitude_test(data.get("answers", [])), "Test evaluated")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
-# ================= DASHBOARD =================
+
+# ── DASHBOARD ─────────────────────────────────────────────────────────────────
 @app.post("/dashboard")
 async def dashboard_post(data: dict):
     try:
-        result = generate_dashboard(data)
-        return {"success": True, "message": "Dashboard data fetched", "data": result}
+        return ok(generate_dashboard(data), "Dashboard data fetched")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
 
 @app.get("/dashboard")
 def dashboard_get(user=Depends(get_current_user)):
-    return {"success": True, "message": f"Welcome {user}", "data": None}
+    return ok(None, f"Welcome {user}")
 
-# ================= PROFILE =================
-PROFILE_FILE = "user_profile.json"
+
+# ── PROFILE ───────────────────────────────────────────────────────────────────
+
+@app.get("/profile/{user_id}")
+async def get_profile_by_id(user_id: str):
+    """Fetch profile by email / user_id."""
+    try:
+        profiles = _load_profiles()
+        raw      = profiles.get(user_id, {})
+        return ok(_build_safe_profile(raw, user_id), "Profile fetched")
+    except Exception as e:
+        return err(e)
+
 
 @app.get("/get-profile")
-async def get_profile():
+async def get_profile_legacy():
+    """Legacy single-profile endpoint — returns first stored profile."""
     try:
-        if os.path.exists(PROFILE_FILE):
-            with open(PROFILE_FILE, "r") as f:
-                profile_data = json.load(f)
-            return {"success": True, "message": "Profile fetched", "data": profile_data}
-        return {"success": True, "message": "No profile found", "data": {}}
+        profiles = _load_profiles()
+        raw      = next(iter(profiles.values()), {})
+        return ok(_build_safe_profile(raw), "Profile fetched")
     except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+        return err(e)
+
+
+@app.post("/profile/update")
+async def update_profile(data: dict):
+    """
+    Save profile keyed by email.
+    Always returns the FULL saved profile object (not just a message).
+    """
+    try:
+        email    = str(data.get("email", "") or "default").strip()
+        profiles = _load_profiles()
+        # Merge with existing so we never lose fields not included in this request
+        existing = profiles.get(email, {})
+        merged   = {**existing, **data}
+        safe     = _build_safe_profile(merged, email)
+        profiles[email] = safe
+        _save_profiles(profiles)
+        print(f"[profile] saved for '{email}': {list(safe.keys())}")
+        return ok(safe, "Profile updated")
+    except Exception as e:
+        print(f"[profile] update error: {e}")
+        return err(e)
+
 
 @app.post("/update-profile")
-async def update_profile(data: dict):
-    try:
-        with open(PROFILE_FILE, "w") as f:
-            json.dump(data, f)
-        return {"success": True, "message": "Profile updated", "data": data}
-    except Exception as e:
-        return {"success": False, "message": str(e), "data": None}
+async def update_profile_legacy(data: dict):
+    """Legacy endpoint — same logic as /profile/update."""
+    return await update_profile(data)

@@ -2,125 +2,136 @@ import { createContext, useEffect, useState } from "react";
 
 export const AppContext = createContext();
 
-export const AppProvider = ({ children }) => {
-  const [analysisData, setAnalysisData] = useState(() => {
-    const saved = localStorage.getItem("analysis_data");
-    return saved ? JSON.parse(saved) : null;
-  });
+const safeGet = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === "undefined" || raw === "") return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
 
-  const [resumeHistory, setResumeHistory] = useState(() => {
-    const saved = localStorage.getItem("resume_history");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [interviewData, setInterviewData] = useState(() => {
-    const saved = localStorage.getItem("interview_data");
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [roadmapData, setRoadmapData] = useState(() => {
-    const saved = localStorage.getItem("roadmap");
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [codingProgress, setCodingProgress] = useState(() => {
-    const saved = localStorage.getItem("coding_progress");
-    return saved ? JSON.parse(saved) : { streak: 0, completedToday: false, lastActive: null, solvedCount: 0 };
-  });
-
-  const [aptitudeResult, setAptitudeResult] = useState(() => {
-    const saved = localStorage.getItem("aptitude_result");
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [recentUpload, setRecentUpload] = useState(
-    localStorage.getItem("recentUpload") || null
-  );
-
-  const [userProfile, setUserProfile] = useState(() => {
-    const saved = localStorage.getItem("user_profile");
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  useEffect(() => {
-    if (analysisData) localStorage.setItem("analysis_data", JSON.stringify(analysisData));
-    else localStorage.removeItem("analysis_data");
-  }, [analysisData]);
-
-  useEffect(() => {
-    localStorage.setItem("resume_history", JSON.stringify(resumeHistory));
-  }, [resumeHistory]);
-
-  useEffect(() => {
-    if (interviewData) localStorage.setItem("interview_data", JSON.stringify(interviewData));
-    else localStorage.removeItem("interview_data");
-  }, [interviewData]);
-
-  useEffect(() => {
-    if (roadmapData) localStorage.setItem("roadmap", JSON.stringify(roadmapData));
-    else localStorage.removeItem("roadmap");
-  }, [roadmapData]);
-
-  useEffect(() => {
-    if (codingProgress) localStorage.setItem("coding_progress", JSON.stringify(codingProgress));
-    else localStorage.removeItem("coding_progress");
-  }, [codingProgress]);
-
-  useEffect(() => {
-    if (aptitudeResult) localStorage.setItem("aptitude_result", JSON.stringify(aptitudeResult));
-    else localStorage.removeItem("aptitude_result");
-  }, [aptitudeResult]);
-
-  useEffect(() => {
-    if (recentUpload) {
-      localStorage.setItem("recentUpload", recentUpload);
+const safeSet = (key, value) => {
+  try {
+    if (value === null || value === undefined) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify(value));
     }
-  }, [recentUpload]);
+  } catch {
+    // quota exceeded or private browsing — silently ignore
+  }
+};
 
+export const AppProvider = ({ children }) => {
+  const [analysisData,   setAnalysisDataRaw]   = useState(() => safeGet("analysis_data", null));
+  const [resumeHistory,  setResumeHistory]      = useState(() => safeGet("resume_history", []));
+  const [interviewData,  setInterviewDataRaw]   = useState(() => safeGet("interview_data", null));
+  const [roadmapData,    setRoadmapDataRaw]     = useState(() => {
+    const saved = safeGet("roadmap", []);
+    if (Array.isArray(saved)) return saved;
+    if (saved && Array.isArray(saved.topics)) return saved.topics;
+    return [];
+  });
+  const [codingProgress, setCodingProgressRaw] = useState(() =>
+    safeGet("coding_progress", { streak: 0, completedToday: false, lastActive: null, solvedCount: 0 })
+  );
+  const [aptitudeResult, setAptitudeResult]    = useState(() => safeGet("aptitude_result", null));
+  const [recentUpload,   setRecentUploadRaw]   = useState(() => {
+    try { return localStorage.getItem("recentUpload") || null; } catch { return null; }
+  });
+  // null = not yet loaded, {} = loaded but empty
+  const [userProfile,    setUserProfileRaw]    = useState(() => safeGet("user_profile", null));
+
+  // ── Persist ────────────────────────────────────────────────────────────
+  useEffect(() => { safeSet("analysis_data",  analysisData);  }, [analysisData]);
+  useEffect(() => { safeSet("resume_history", resumeHistory ?? []); }, [resumeHistory]);
+  useEffect(() => { safeSet("interview_data", interviewData); }, [interviewData]);
+  useEffect(() => { safeSet("roadmap", Array.isArray(roadmapData) ? roadmapData : []); }, [roadmapData]);
+  useEffect(() => { safeSet("coding_progress", codingProgress); }, [codingProgress]);
+  useEffect(() => { safeSet("aptitude_result", aptitudeResult); }, [aptitudeResult]);
   useEffect(() => {
-    if (userProfile) localStorage.setItem("user_profile", JSON.stringify(userProfile));
-    else localStorage.removeItem("user_profile");
+    try {
+      if (recentUpload) localStorage.setItem("recentUpload", recentUpload);
+      else localStorage.removeItem("recentUpload");
+    } catch {}
+  }, [recentUpload]);
+  useEffect(() => {
+    if (userProfile && typeof userProfile === "object") {
+      safeSet("user_profile", userProfile);
+    }
   }, [userProfile]);
 
-  const clearAllAppData = () => {
-    setAnalysisData(null);
-    setResumeHistory([]);
-    setInterviewData(null);
-    setRoadmapData(null);
-    setCodingProgress({ streak: 0, completedToday: false, lastActive: null, solvedCount: 0 });
-    setAptitudeResult(null);
-    setRecentUpload(null);
-    setUserProfile(null);
+  // ── Safe setters ───────────────────────────────────────────────────────
 
-    localStorage.removeItem("analysis_data");
-    localStorage.removeItem("resume_history");
-    localStorage.removeItem("interview_data");
-    localStorage.removeItem("roadmap");
-    localStorage.removeItem("coding_progress");
-    localStorage.removeItem("aptitude_result");
-    localStorage.removeItem("recentUpload");
-    localStorage.removeItem("user_profile");
+  const setAnalysisData = (data) => {
+    setAnalysisDataRaw(data && typeof data === "object" ? data : null);
+  };
+
+  const setInterviewData = (data) => {
+    if (!data || typeof data !== "object") { setInterviewDataRaw(null); return; }
+    setInterviewDataRaw({
+      ...data,
+      weaknesses: Array.isArray(data.weaknesses) ? data.weaknesses : [],
+    });
+  };
+
+  const setRoadmapData = (data) => {
+    if (Array.isArray(data))                    { setRoadmapDataRaw(data);        return; }
+    if (data && Array.isArray(data.topics))     { setRoadmapDataRaw(data.topics); return; }
+    setRoadmapDataRaw([]);
+  };
+
+  // Accepts full profile object or partial — merges with existing, never nukes it
+  const setUserProfile = (data) => {
+    if (!data || typeof data !== "object") return; // refuse to set null/bad values
+    setUserProfileRaw((prev) => {
+      const merged = { ...(prev ?? {}), ...data };
+      // Ensure custom_skills is always an array
+      if (!Array.isArray(merged.custom_skills)) merged.custom_skills = [];
+      return merged;
+    });
+  };
+
+  // Hard replace — used only when we receive a fresh authoritative profile from the server
+  const replaceUserProfile = (data) => {
+    const safe = data && typeof data === "object" ? data : {};
+    if (!Array.isArray(safe.custom_skills)) safe.custom_skills = [];
+    setUserProfileRaw(safe);
+  };
+
+  const setRecentUpload = (v) => setRecentUploadRaw(v || null);
+  const setCodingProgress = (v) => setCodingProgressRaw(v);
+
+  const clearAllAppData = () => {
+    setAnalysisDataRaw(null);
+    setResumeHistory([]);
+    setInterviewDataRaw(null);
+    setRoadmapDataRaw([]);
+    setCodingProgressRaw({ streak: 0, completedToday: false, lastActive: null, solvedCount: 0 });
+    setAptitudeResult(null);
+    setRecentUploadRaw(null);
+    setUserProfileRaw(null);
+    [
+      "analysis_data","resume_history","interview_data","roadmap",
+      "coding_progress","aptitude_result","recentUpload","user_profile",
+    ].forEach((k) => { try { localStorage.removeItem(k); } catch {} });
   };
 
   return (
     <AppContext.Provider
       value={{
-        analysisData,
-        setAnalysisData,
-        resumeHistory,
-        setResumeHistory,
-        interviewData,
-        setInterviewData,
-        roadmapData,
+        analysisData,   setAnalysisData,
+        resumeHistory,  setResumeHistory,
+        interviewData,  setInterviewData,
+        roadmapData: Array.isArray(roadmapData) ? roadmapData : [],
         setRoadmapData,
-        codingProgress,
-        setCodingProgress,
-        aptitudeResult,
-        setAptitudeResult,
-        recentUpload,
-        setRecentUpload,
-        userProfile,
-        setUserProfile,
+        codingProgress, setCodingProgress,
+        aptitudeResult, setAptitudeResult,
+        recentUpload,   setRecentUpload,
+        userProfile,    setUserProfile, replaceUserProfile,
         clearAllAppData,
       }}
     >
