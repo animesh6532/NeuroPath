@@ -246,3 +246,105 @@ L --> M
 I --> M
 
 M --> N[Career Insights]
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+* React (Vite)
+* Context API (State Management)
+* Modern CSS (Glassmorphism UI)
+
+### Backend
+
+* FastAPI
+* REST APIs
+* Modular architecture
+
+### AI / ML
+
+* NLP-based resume parsing
+* Skill matching logic
+* Rule-based + ML hybrid evaluation
+
+### Computer Vision
+
+* OpenCV (Face Detection & Proctoring)
+
+### Database
+
+* SQLite / MySQL
+
+---
+
+## ⚡ Unique Highlights
+
+* Real-world hiring pipeline simulation
+* Strict fullscreen interview & test environment
+* Skill-based dynamic interview generation
+* Integrated coding + aptitude system
+* End-to-end data flow (Resume → Interview → Roadmap → Dashboard)
+
+---
+
+## 📂 Project Structure
+
+```
+NeuroPath_AI/
+│
+├── frontend/
+│   ├── src/pages/
+│   ├── src/context/
+│   ├── src/api/
+│
+├── backend/
+│   ├── app/ml/
+│   ├── app/routes/
+│   ├── app/proctoring/
+│
+└── README.md
+```
+
+---
+
+## ▶️ Running Locally
+
+### Backend
+
+```
+cd backend
+uvicorn app.main:app --reload --port 8001
+```
+
+### Frontend
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 📌 Future Improvements
+
+* LLM-based answer evaluation
+* Real-time voice emotion analysis
+* Adaptive interview difficulty
+* Deployment (AWS / Docker)
+
+---
+
+## 👤 Author
+
+**Animesh Sahoo**
+
+* GitHub: https://github.com/animesh6532
+
+---
+
+## ⭐ Final Note
+
+This project is designed to replicate a **real hiring system using AI** — combining resume intelligence, interview simulation, and learning guidance into one unified platform.
