@@ -221,36 +221,35 @@ It helps users:
 ---
 ## 🧠 System Architecture
 
-```mermaid
 flowchart TD
 
-A[👤 User] --> B[🔐 Authentication]
+A[User] --> B[Authentication]
 
-B --> C[📄 Resume Upload]
-C --> D[🧠 Resume Analyzer]
+B --> C[Resume Upload]
+C --> D[Resume Analyzer]
 
 D --> D1[Skill Extraction]
-D --> D2[Project & Experience Extraction]
+D --> D2[Project Experience Extraction]
 D --> D3[Domain Detection]
-D --> D4[Resume Score + Missing Skills]
+D --> D4[Resume Score Missing Skills]
 
-D1 --> E[🎤 Interview Generator]
+D1 --> E[Interview Generator]
 
-E --> F[🧑‍💻 AI Mock Interview]
+E --> F[AI Mock Interview]
 
-F --> G[📷 Proctoring System]
+F --> G[Proctoring System]
 G --> G1[Face Detection]
-G --> G2[Multi-Person Detection]
+G --> G2[Multi Person Detection]
 G --> G3[Strict Mode Monitoring]
 
-F --> H[📝 Answer Evaluation Engine]
+F --> H[Answer Evaluation Engine]
 
 H --> H1[Technical Score]
 H --> H2[Communication Score]
 H --> H3[Confidence Level]
 H --> H4[Weakness Detection]
 
-H4 --> I[🛣️ Learning Roadmap Engine]
+H4 --> I[Learning Roadmap Engine]
 
 D4 --> I
 
@@ -258,28 +257,28 @@ I --> I1[Personalized Topics]
 I --> I2[Learning Resources]
 I --> I3[Progress Tracking]
 
-%% Branching logic
 I --> J{User Domain}
 
-J -->|Technical| K[💻 Daily Coding System]
-K --> K1[2-3 Daily Problems]
-K --> K2[Fullscreen Strict Mode]
+J -->|Technical| K[Daily Coding System]
+K --> K1[Daily Problems]
+K --> K2[Fullscreen Mode]
 K --> K3[Streak Tracking]
 
-J -->|All Users| L[🧠 Aptitude System]
-L --> L1[20 Questions]
-L --> L2[30 Min Timer]
-L --> L3[Fullscreen Strict Mode]
-L --> L4[Score + Accuracy]
+J -->|All Users| L[Aptitude System]
+L --> L1[Questions]
+L --> L2[Timer]
+L --> L3[Strict Mode]
+L --> L4[Score Accuracy]
 
-%% Final Aggregation
-H --> M[📊 Dashboard]
+H --> M[Dashboard]
 D --> M
 K --> M
 L --> M
 I --> M
 
-M --> N[🚀 Career Insights & Progress]
+M --> N[Career Insights Progress]
+
+---
 
 ## 🛠️ Tech Stack
 
